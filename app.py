@@ -157,7 +157,7 @@ if "history" not in st.session_state:
 # =====================================================
 # API CONFIG
 # =====================================================
-API_KEY = "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"
+API_KEY = st.secrets["API_KEY"]
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
 if not API_KEY:
     st.error("OPENROUTER_API_KEY not set")
