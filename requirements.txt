@@ -5,3 +5,5 @@ sentence-transformers
 python-docx
 pdfkit
 markdown
+torch
+torchvision
