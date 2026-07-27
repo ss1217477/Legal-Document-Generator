@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import requests, os, json
 import faiss
 from sentence_transformers import SentenceTransformer
@@ -159,6 +160,75 @@ h1, h2, h3, .display {{
 }}
 .seal.small {{ width: 34px; height: 34px; font-size: 15px; }}
 .seal.big {{ width: 84px; height: 84px; font-size: 34px; }}
+
+/* ---------- Motion system ---------- */
+@keyframes fadeInUp {{
+    from {{ opacity: 0; transform: translateY(14px); }}
+    to   {{ opacity: 1; transform: translateY(0); }}
+}}
+@keyframes floatY {{
+    0%, 100% {{ transform: translateY(0) rotate(-3deg); }}
+    50%      {{ transform: translateY(-8px) rotate(3deg); }}
+}}
+@keyframes pulseRing {{
+    0%   {{ box-shadow: 0 0 0 0 {BRASS}55; }}
+    70%  {{ box-shadow: 0 0 0 14px {BRASS}00; }}
+    100% {{ box-shadow: 0 0 0 0 {BRASS}00; }}
+}}
+@keyframes pulseDot {{
+    0%, 100% {{ opacity: 1; transform: scale(1); }}
+    50%      {{ opacity: .45; transform: scale(1.4); }}
+}}
+@keyframes shimmerSweep {{
+    0%   {{ background-position: -200% 0; }}
+    100% {{ background-position: 200% 0; }}
+}}
+@keyframes drawLine {{
+    from {{ width: 0; }}
+    to   {{ width: 60px; }}
+}}
+@keyframes gradientShift {{
+    0%   {{ background-position: 0% 50%; }}
+    50%  {{ background-position: 100% 50%; }}
+    100% {{ background-position: 0% 50%; }}
+}}
+
+.card {{ opacity: 0; animation: fadeInUp .5s ease forwards; }}
+.card:nth-of-type(1) {{ animation-delay: .02s; }}
+.card:nth-of-type(2) {{ animation-delay: .08s; }}
+.card:nth-of-type(3) {{ animation-delay: .14s; }}
+.card:nth-of-type(4) {{ animation-delay: .20s; }}
+.card:nth-of-type(5) {{ animation-delay: .26s; }}
+.card:nth-of-type(6) {{ animation-delay: .32s; }}
+.card:nth-of-type(7) {{ animation-delay: .38s; }}
+.card:nth-of-type(8) {{ animation-delay: .44s; }}
+
+.hero-banner {{ opacity: 0; animation: fadeInUp .6s ease forwards; }}
+
+.seal-float {{ animation: floatY 3.2s ease-in-out infinite, pulseRing 2.6s ease-out infinite; }}
+
+.section-title.underline::after {{
+    content: '';
+    display: block;
+    height: 3px;
+    background: linear-gradient(90deg, {BRASS}, transparent);
+    animation: drawLine .6s ease forwards .2s;
+    animation-fill-mode: both;
+    border-radius: 3px;
+    width: 0;
+}}
+
+.live-dot {{
+    display:inline-block; width:8px; height:8px; border-radius:50%;
+    background:{SAGE}; margin-right:6px; animation: pulseDot 1.6s ease-in-out infinite;
+}}
+
+.activity-row {{ opacity:0; animation: fadeInUp .45s ease forwards; }}
+.activity-row:nth-of-type(1) {{ animation-delay:.05s; }}
+.activity-row:nth-of-type(2) {{ animation-delay:.11s; }}
+.activity-row:nth-of-type(3) {{ animation-delay:.17s; }}
+.activity-row:nth-of-type(4) {{ animation-delay:.23s; }}
+.activity-row:nth-of-type(5) {{ animation-delay:.29s; }}
 
 @keyframes stampDown {{
     0%   {{ transform: scale(2.4) rotate(-18deg); opacity: 0; }}
@@ -467,33 +537,124 @@ def top_bar(title, subtitle, icon="📊"):
     st.markdown("<div class='letterhead-rule'></div>", unsafe_allow_html=True)
 
 # =====================================================
+# ANIMATED WIDGETS (rendered in a sandboxed iframe so real JS
+# animation — count-up numbers, growing bars — actually runs;
+# st.markdown() strips <script> tags, components.html() does not)
+# =====================================================
+def _kpi_card_html(title, value, icon, color, animate_number):
+    target = value if animate_number else 0
+    display_fallback = value if not animate_number else 0
+    counter_html = (
+        f'<h1 class="kpi-num" data-target="{target}" style="margin:0;color:{color};">0</h1>'
+        if animate_number else
+        f'<h1 class="kpi-num" style="margin:0;color:{color};">{value}</h1>'
+    )
+    return f"""
+    <div class="kpi-card" style="--accent:{color};">
+        <div>
+            <div class="kpi-title">{title}</div>
+            {counter_html}
+        </div>
+        <div class="kpi-icon-wrap" style="background:{color}22;">{icon}</div>
+    </div>
+    """
+
+
+def animated_kpi_row(total_docs):
+    cards = [
+        _kpi_card_html("Total Docs", total_docs, "📄", BRASS, True),
+        _kpi_card_html("Draft Mode", "RAG", "⚖️", SAGE, False),
+        _kpi_card_html("AI Engine", "LLM", "🤖", "#8b6fd6", False),
+        _kpi_card_html('<span class="live-dot"></span>Status', "Live", "⚡", RUST, False),
+    ]
+    html = f"""
+    <style>
+    body {{ margin:0; font-family:'Inter',sans-serif; background:transparent; }}
+    .row {{ display:flex; gap:16px; }}
+    .kpi-card {{
+        flex:1; background:{PANEL}; border:1px solid {BORDER}; border-radius:16px;
+        padding:20px 22px; display:flex; justify-content:space-between; align-items:center;
+        box-shadow:0 6px 20px rgba(0,0,0,0.18);
+        opacity:0; transform:translateY(14px);
+        animation: cardIn .5s ease forwards;
+        transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }}
+    .kpi-card:hover {{ transform:translateY(-4px); border-color: var(--accent); box-shadow:0 12px 26px rgba(0,0,0,.28); }}
+    .kpi-card:nth-child(1){{animation-delay:.02s}} .kpi-card:nth-child(2){{animation-delay:.10s}}
+    .kpi-card:nth-child(3){{animation-delay:.18s}} .kpi-card:nth-child(4){{animation-delay:.26s}}
+    @keyframes cardIn {{ to {{ opacity:1; transform:translateY(0); }} }}
+    .kpi-title {{ color:{MUTED}; font-size:14px; margin-bottom:2px; }}
+    .kpi-num {{ font-family:'Newsreader',serif; font-size:34px; font-weight:700; }}
+    .kpi-icon-wrap {{ width:44px; height:44px; border-radius:12px; display:flex; align-items:center;
+        justify-content:center; font-size:20px; flex-shrink:0; }}
+    .live-dot {{ display:inline-block; width:8px; height:8px; border-radius:50%; background:{SAGE};
+        margin-right:6px; animation: pulseDot 1.6s ease-in-out infinite; }}
+    @keyframes pulseDot {{ 0%,100%{{opacity:1;transform:scale(1);}} 50%{{opacity:.4;transform:scale(1.4);}} }}
+    </style>
+    <div class="row">{''.join(cards)}</div>
+    <script>
+    document.querySelectorAll('.kpi-num[data-target]').forEach(function(el) {{
+        var target = parseInt(el.getAttribute('data-target'), 10) || 0;
+        var current = 0;
+        var steps = Math.max(target, 1);
+        var stepTime = Math.max(600 / steps, 18);
+        var timer = setInterval(function() {{
+            current += 1;
+            el.textContent = current;
+            if (current >= target) {{ clearInterval(timer); el.textContent = target; }}
+        }}, stepTime);
+    }});
+    </script>
+    """
+    components.html(html, height=110)
+
+
+def animated_insights_chart(doc_types, color=BRASS):
+    if not doc_types:
+        st.info("No analytics yet. Create your first document 🚀")
+        return
+    max_v = max(doc_types.values())
+    bars = "".join(
+        f"""<div class="bar-col">
+                <div class="bar-track"><div class="bar-fill" data-h="{(v/max_v)*100:.0f}"></div></div>
+                <div class="bar-val">{v}</div>
+                <div class="bar-label">{k}</div>
+            </div>"""
+        for k, v in doc_types.items()
+    )
+    html = f"""
+    <style>
+    body {{ margin:0; font-family:'Inter',sans-serif; background:transparent; }}
+    .chart {{ display:flex; align-items:flex-end; gap:26px; height:150px; padding:6px 4px 0 4px; }}
+    .bar-col {{ display:flex; flex-direction:column; align-items:center; flex:1; height:100%; justify-content:flex-end; }}
+    .bar-track {{ width:38px; height:100px; background:{BORDER}55; border-radius:8px; display:flex; align-items:flex-end; overflow:hidden; }}
+    .bar-fill {{
+        width:100%; height:0%; border-radius:8px;
+        background:linear-gradient(180deg, {BRASS_LIGHT}, {color});
+        box-shadow:0 0 12px {color}66;
+        transition:height 1s cubic-bezier(.22,.9,.3,1.2);
+    }}
+    .bar-val {{ color:{TEXT}; font-family:'JetBrains Mono',monospace; font-size:12px; margin-top:6px; }}
+    .bar-label {{ color:{MUTED}; font-size:11px; margin-top:2px; text-align:center; }}
+    </style>
+    <div class="chart">{bars}</div>
+    <script>
+    setTimeout(function() {{
+        document.querySelectorAll('.bar-fill').forEach(function(el) {{
+            el.style.height = el.getAttribute('data-h') + '%';
+        }});
+    }}, 80);
+    </script>
+    """
+    components.html(html, height=175)
+
+
+# =====================================================
 # DASHBOARD
 # =====================================================
 def dashboard_ui():
     top_bar("Dashboard", "Your AI-powered legal drafting workspace")
-
-    def kpi(title, value, icon, color):
-        return f"""
-        <div class='card hoverable'>
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                    <div class='muted'>{title}</div>
-                    <h1 style="margin:0; color:{color}; font-family:'Newsreader',serif;">{value}</h1>
-                </div>
-                <div class="kpi-icon" style="background:{color}22;">{icon}</div>
-            </div>
-        </div>
-        """
-
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.markdown(kpi("Total Docs", len(st.session_state.history), "📄", BRASS), unsafe_allow_html=True)
-    with c2:
-        st.markdown(kpi("Draft Mode", "RAG", "⚖️", SAGE), unsafe_allow_html=True)
-    with c3:
-        st.markdown(kpi("AI Engine", "LLM", "🤖", "#8b6fd6"), unsafe_allow_html=True)
-    with c4:
-        st.markdown(kpi("Status", "Live", "⚡", RUST), unsafe_allow_html=True)
+    animated_kpi_row(len(st.session_state.history))
 
     left, right = st.columns([2.5, 1.5])
 
@@ -501,7 +662,7 @@ def dashboard_ui():
         st.markdown(f"""
         <div class="hero-banner" style="background: linear-gradient(120deg, {INK_SOFT}, {INK});">
             <div class="hero-overlay">
-                {seal("big")}
+                <div class="seal-float">{seal("big")}</div>
                 <div>
                     <h2>Draft with confidence</h2>
                     <p>Generate Indian legal documents using AI, grounded in verified clauses.</p>
@@ -532,10 +693,7 @@ def dashboard_ui():
         with ic2:
             st.markdown("<div style='text-align:right;' class='toggle-pill'>RAG 🔵</div>", unsafe_allow_html=True)
 
-        if doc_types:
-            st.bar_chart(doc_types, color=BRASS)
-        else:
-            st.info("No analytics yet. Create your first document 🚀")
+        animated_insights_chart(doc_types)
         st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("<div class='card hoverable'><h3 style='margin-top:0;'>📝 My Documents</h3>", unsafe_allow_html=True)
@@ -629,7 +787,7 @@ def landing_ui():
             st.rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("<div class='section-title'>Why LegalDoc AI?</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title underline'>Why LegalDoc AI?</div>", unsafe_allow_html=True)
 
     features = [
         ("⚖️", "Legal Accuracy", "Clause-based drafting using verified Indian legal formats."),
@@ -648,7 +806,7 @@ def landing_ui():
                 """, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("<div class='section-title'>How it works</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title underline'>How it works</div>", unsafe_allow_html=True)
     steps = [
         ("Select", "Choose the document type & variant"),
         ("Converse", "Answer AI-guided legal questions in a chat"),
