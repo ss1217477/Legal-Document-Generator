@@ -17,12 +17,13 @@ def create_docx(content: str):
 # =====================================================
 st.set_page_config(
     page_title="LegalDoc AI",
+    page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # =====================================================
-# SESSION STATE (must exist before CSS reads theme)
+# SESSION STATE
 # =====================================================
 if "page" not in st.session_state:
     st.session_state.page = "landing"
@@ -40,13 +41,19 @@ if "quick_doc_type" not in st.session_state:
     st.session_state.quick_doc_type = "Rent Agreement"
 if "doc_tasks" not in st.session_state:
     st.session_state.doc_tasks = []
+if "collapsed" not in st.session_state:
+    st.session_state.collapsed = False
 
 defaults = {
     "step": 1,
     "questions": [],
     "answers": {},
     "final_doc": "",
-    "extra": ""
+    "extra": "",
+    "q_index": 0,
+    "saved": False,
+    "document": "Rent Agreement",
+    "subtype": "Residential",
 }
 for k, v in defaults.items():
     st.session_state.setdefault(k, v)
@@ -54,164 +61,282 @@ for k, v in defaults.items():
 IS_DARK = st.session_state.theme == "dark"
 
 # =====================================================
-# THEME COLORS
+# DESIGN TOKENS — "The Chambers" (ink, parchment & brass)
+#
+# A document-drafting product lives or dies on the feeling of the
+# paper itself, so the palette borrows from a barrister's chambers:
+# deep pine-ink walls, brass fittings, a wax seal for authenticity —
+# rather than the generic dark-SaaS blue gradient.
 # =====================================================
 if IS_DARK:
-    BG = "#020617"
-    BG_SOFT = "#0b1220"
-    CARD_BG = "linear-gradient(145deg, #0b1220, #0a0f1c)"
-    BORDER = "#1e293b"
-    TEXT = "#e5e7eb"
-    MUTED = "#94a3b8"
+    INK = "#0F1710"          # deep pine-ink background
+    INK_SOFT = "#161F17"
+    PANEL = "linear-gradient(155deg, #182119, #121912)"
+    BORDER = "#2B3A2C"
+    TEXT = "#EDE7D9"          # warm parchment white
+    MUTED = "#93A090"
 else:
-    BG = "#f1f5f9"
-    BG_SOFT = "#ffffff"
-    CARD_BG = "linear-gradient(145deg, #ffffff, #f8fafc)"
-    BORDER = "#e2e8f0"
-    TEXT = "#0f172a"
-    MUTED = "#64748b"
+    INK = "#F4EEDD"          # parchment
+    INK_SOFT = "#FFFFFF"
+    PANEL = "linear-gradient(155deg, #FFFFFF, #FAF5E8)"
+    BORDER = "#DCD2B4"
+    TEXT = "#1E2A1D"
+    MUTED = "#5B6B57"
 
-ACCENT = "#3b82f6"
-ACCENT_2 = "#2563eb"
+BRASS = "#C9A227"
+BRASS_LIGHT = "#E4C25E"
+RUST = "#A6452D"
+SAGE = "#7C8B6F"
 
 # =====================================================
-# PREMIUM CSS
+# GLOBAL CSS
 # =====================================================
 st.markdown(f"""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;0,6..72,700;1,6..72,500&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
 #MainMenu, footer {{visibility: hidden;}}
 
+html, body, [class*="css"] {{ font-family: 'Inter', sans-serif; }}
+
 .stApp {{
-    background: radial-gradient(circle at top, {BG}, {BG});
+    background: {INK};
     color: {TEXT};
-    font-family: 'Inter', sans-serif;
+    transition: background-color .35s ease, color .35s ease;
 }}
 
-/* Card */
+h1, h2, h3, .display {{
+    font-family: 'Newsreader', serif;
+    letter-spacing: -0.01em;
+}}
+
+.mono {{ font-family: 'JetBrains Mono', monospace; }}
+
+/* Letterhead rule */
+.letterhead-rule {{
+    height: 2px;
+    background: linear-gradient(90deg, {BRASS}, transparent);
+    margin: 4px 0 26px 0;
+    border-radius: 2px;
+}}
+
+/* Card / paper sheet */
 .card {{
-    background: {CARD_BG};
+    background: {PANEL};
     border: 1px solid {BORDER};
-    border-radius: 20px;
+    border-radius: 16px;
     padding: 26px;
-    margin-bottom: 22px;
-    box-shadow: 0 4px 18px rgba(0,0,0,0.15);
+    margin-bottom: 20px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}}
+.card.hoverable:hover {{
+    transform: translateY(-4px);
+    border-color: {BRASS}55;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.24);
 }}
 
 .section-title {{
-    font-size: 26px;
-    font-weight: 800;
-    margin-bottom: 8px;
+    font-size: 25px;
+    font-weight: 700;
+    margin-bottom: 6px;
     color: {TEXT};
+    font-family: 'Newsreader', serif;
 }}
 
 .muted {{ color: {MUTED}; }}
+.brass-text {{ color: {BRASS_LIGHT if IS_DARK else BRASS}; }}
+
+/* Wax seal */
+.seal {{
+    width: 46px; height: 46px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, {BRASS_LIGHT}, {BRASS} 60%, #8a6c1c 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    box-shadow: inset 0 0 0 3px rgba(0,0,0,0.18), 0 4px 10px rgba(0,0,0,0.35);
+    flex-shrink: 0;
+}}
+.seal.small {{ width: 34px; height: 34px; font-size: 15px; }}
+.seal.big {{ width: 84px; height: 84px; font-size: 34px; }}
+
+@keyframes stampDown {{
+    0%   {{ transform: scale(2.4) rotate(-18deg); opacity: 0; }}
+    55%  {{ transform: scale(0.92) rotate(3deg); opacity: 1; }}
+    75%  {{ transform: scale(1.06) rotate(-2deg); }}
+    100% {{ transform: scale(1) rotate(-6deg); }}
+}}
+.stamp-wrap {{ text-align:center; margin: 6px 0 22px 0; }}
+.stamp {{
+    display: inline-flex; flex-direction: column; align-items:center; justify-content:center;
+    width: 130px; height: 130px; border-radius: 50%;
+    border: 3px solid {RUST};
+    color: {RUST};
+    font-family: 'Newsreader', serif; font-weight: 700; font-size: 15px;
+    animation: stampDown .55s cubic-bezier(.2,.9,.3,1.2);
+    transform: rotate(-6deg);
+    background: {'rgba(166,69,45,0.08)' if IS_DARK else 'rgba(166,69,45,0.06)'};
+}}
+.stamp span.small {{ font-size: 10px; letter-spacing: 2px; margin-top: 4px; font-family:'Inter',sans-serif; }}
 
 /* Buttons */
 .stButton > button {{
-    background: linear-gradient(90deg, {ACCENT}, {ACCENT_2});
-    color: white;
-    border-radius: 14px;
-    padding: 10px 24px;
+    background: linear-gradient(90deg, {BRASS}, #B48A22);
+    color: #1a1405;
+    border-radius: 10px;
+    padding: 9px 22px;
     font-weight: 700;
     border: none;
-    transition: 0.2s;
+    transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
 }}
-.stButton > button:hover {{ transform: scale(1.02); }}
+.stButton > button:hover {{
+    transform: translateY(-1px);
+    filter: brightness(1.08);
+    box-shadow: 0 6px 16px rgba(201,162,39,0.35);
+}}
+.stButton > button:active {{ transform: translateY(0px) scale(.98); }}
+
+/* Secondary look for sidebar / ghost buttons handled below */
 
 /* Inputs */
-input, textarea {{
-    background-color: {BG_SOFT} !important;
+input, textarea, .stChatInput textarea {{
+    background-color: {INK_SOFT} !important;
     color: {TEXT} !important;
-    border-radius: 12px !important;
+    border-radius: 10px !important;
     border: 1px solid {BORDER} !important;
 }}
-
 div[data-baseweb="select"] > div {{
-    background-color: {BG_SOFT} !important;
-    border-radius: 12px !important;
+    background-color: {INK_SOFT} !important;
+    border-radius: 10px !important;
     border: 1px solid {BORDER} !important;
     color: {TEXT} !important;
 }}
 
-/* SIDEBAR */
-section[data-testid="stSidebar"] {{
-    background: linear-gradient(180deg, {BG}, {BG});
-    border-right: 1px solid {BORDER};
+/* Radio-as-pills (document type / variant / quick setup selectors) */
+div[data-testid="stRadio"] > div {{
+    gap: 10px;
 }}
-section[data-testid="stSidebar"] .stButton > button {{
-    width: 100%;
-    text-align: left;
+div[data-testid="stRadio"] label {{
+    background: {INK_SOFT};
+    border: 1px solid {BORDER};
     border-radius: 12px;
-    background: transparent;
-    color: {TEXT};
-    border: 1px solid transparent;
-    padding: 10px 14px;
-    font-weight: 600;
-    box-shadow: none;
+    padding: 10px 16px !important;
+    margin: 0 !important;
+    transition: border-color .15s ease, transform .12s ease, background .15s ease;
+    cursor: pointer;
 }}
-section[data-testid="stSidebar"] .stButton > button:hover {{
-    background: rgba(59, 130, 246, 0.15);
-    border: 1px solid {ACCENT};
-    transform: translateX(3px);
+div[data-testid="stRadio"] label:hover {{
+    border-color: {BRASS};
+    transform: translateY(-2px);
 }}
+div[data-testid="stRadio"] label[data-baseweb="radio"] > div:first-child {{
+    display: none;
+}}
+
+/* Docket stepper */
+.docket {{ display:flex; align-items:center; margin-bottom: 22px; }}
+.docket-step {{ display:flex; flex-direction:column; align-items:center; flex:1; position:relative; }}
+.docket-circle {{
+    width: 34px; height: 34px; border-radius: 50%;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'JetBrains Mono', monospace; font-weight:600; font-size:13px;
+    border: 2px solid {BORDER}; color: {MUTED}; background:{INK_SOFT};
+    transition: all .25s ease; z-index: 2;
+}}
+.docket-circle.done {{ background:{BRASS}; border-color:{BRASS}; color:#1a1405; }}
+.docket-circle.active {{ border-color:{BRASS}; color:{BRASS if not IS_DARK else BRASS_LIGHT}; box-shadow: 0 0 0 4px {BRASS}22; }}
+.docket-label {{ font-size:12px; margin-top:6px; color:{MUTED}; text-align:center; }}
+.docket-line {{
+    position:absolute; top:17px; left:-50%; width:100%; height:2px;
+    background:{BORDER}; z-index:1;
+}}
+.docket-line.done {{ background:{BRASS}; }}
+.docket-step:first-child .docket-line {{ display:none; }}
 
 /* KPI icon chip */
 .kpi-icon {{
-    width: 44px; height: 44px;
-    border-radius: 12px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 20px;
+    width: 44px; height: 44px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center; font-size: 20px;
 }}
 
 /* Hero banner */
 .hero-banner {{
-    position: relative;
-    border-radius: 20px;
-    overflow: hidden;
-    height: 220px;
-    margin-bottom: 22px;
-    background-size: cover;
-    background-position: center;
+    position: relative; border-radius: 18px; overflow: hidden; height: 230px;
+    margin-bottom: 22px; background-size: cover; background-position: center;
     border: 1px solid {BORDER};
 }}
 .hero-overlay {{
     position: absolute; inset: 0;
-    background: linear-gradient(90deg, rgba(2,6,23,0.92) 30%, rgba(2,6,23,0.55) 75%, rgba(2,6,23,0.2) 100%);
-    display: flex; flex-direction: column; justify-content: center;
-    padding: 0 34px;
+    background: linear-gradient(90deg, {INK}ee 32%, {INK}99 70%, {INK}22 100%);
+    display: flex; align-items:center; gap: 22px; padding: 0 34px;
 }}
-.hero-overlay h2 {{ color: white; margin: 0 0 6px 0; font-size: 26px; }}
-.hero-overlay p {{ color: #cbd5e1; margin: 0; max-width: 420px; }}
+.hero-overlay h2 {{ color: {TEXT}; margin: 0 0 6px 0; font-size: 30px; font-family:'Newsreader',serif; font-weight:700; }}
+.hero-overlay p {{ color: {MUTED}; margin: 0; max-width: 420px; }}
 
-/* Toggle pill (visual) */
+/* Toggle pill */
 .toggle-pill {{
     display: inline-flex; align-items: center; gap: 8px;
-    background: {BG_SOFT}; border: 1px solid {BORDER};
-    border-radius: 999px; padding: 6px 14px; font-size: 13px; color: {MUTED};
+    background: {INK_SOFT}; border: 1px solid {BORDER};
+    border-radius: 999px; padding: 6px 14px; font-size: 12px; color: {MUTED};
 }}
 
 /* Activity row */
 .activity-row {{
     display: flex; justify-content: space-between; align-items: center;
     padding: 12px 4px; border-bottom: 1px solid {BORDER};
+    transition: padding-left .15s ease;
 }}
+.activity-row:hover {{ padding-left: 6px; }}
 
 /* Disclaimer box */
 .disclaimer-box {{
-    background: rgba(245, 158, 11, 0.1);
-    border: 1px solid rgba(245, 158, 11, 0.35);
-    border-radius: 16px;
-    padding: 18px 20px;
-    color: #f59e0b;
+    background: {RUST}18;
+    border: 1px solid {RUST}55;
+    border-radius: 14px;
+    padding: 16px 20px;
+    color: {RUST if not IS_DARK else '#E8A28F'};
 }}
 
-/* Top bar */
-.topbar {{
-    display: flex; justify-content: space-between; align-items: flex-start;
-    margin-bottom: 26px;
+.topbar {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }}
+
+/* Sidebar */
+section[data-testid="stSidebar"] {{
+    background: {INK};
+    border-right: 1px solid {BORDER};
+    transition: width .25s ease;
+}}
+section[data-testid="stSidebar"] .stButton > button {{
+    width: 100%; text-align: left; border-radius: 10px;
+    background: transparent; color: {TEXT}; border: 1px solid transparent;
+    padding: 10px 14px; font-weight: 600; box-shadow: none;
+}}
+section[data-testid="stSidebar"] .stButton > button:hover {{
+    background: {BRASS}1c; border: 1px solid {BRASS}55;
+    transform: translateX(3px); box-shadow:none; filter:none;
+}}
+
+/* Chat bubbles for the Q&A step */
+div[data-testid="stChatMessage"] {{
+    background: {INK_SOFT};
+    border: 1px solid {BORDER};
+    border-radius: 14px;
+    padding: 4px 6px;
+    margin-bottom: 8px;
 }}
 </style>
 """, unsafe_allow_html=True)
+
+
+def seal(size="", symbol="⚖"):
+    cls = f"seal {size}".strip()
+    return f"<div class='{cls}'>{symbol}</div>"
+
+
+def toast(msg, icon="✅"):
+    try:
+        st.toast(msg, icon=icon)
+    except Exception:
+        pass
 
 # =====================================================
 # API CONFIG
@@ -265,28 +390,25 @@ def call_llm(prompt, temp=0.25, tokens=1400):
 # =====================================================
 def sidebar():
     with st.sidebar:
-        if "collapsed" not in st.session_state:
-            st.session_state.collapsed = False
-
         toggle = "➡️" if st.session_state.collapsed else "⬅️"
         if st.button(toggle, use_container_width=True):
             st.session_state.collapsed = not st.session_state.collapsed
             st.rerun()
 
         if not st.session_state.collapsed:
-            st.markdown("""
+            st.markdown(f"""
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:24px;">
-                <div style="width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#3b82f6,#2563eb);
-                display:flex;align-items:center;justify-content:center;font-size:20px;">⚖️</div>
+                {seal("small")}
                 <div>
-                    <div style="font-weight:800; font-size:16px;">LegalDoc AI</div>
-                    <div class='muted' style="font-size:12px;">AI Legal Workspace</div>
+                    <div style="font-weight:700; font-size:16px; font-family:'Newsreader',serif;">LegalDoc AI</div>
+                    <div class='muted' style="font-size:12px;">Chambers of AI Drafting</div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
         def nav_item(icon, label, page):
             text = f"{icon}  {label}" if not st.session_state.collapsed else icon
+            active = st.session_state.page == page
             if st.button(text, use_container_width=True, key=f"nav_{page}"):
                 st.session_state.page = page
                 st.rerun()
@@ -301,31 +423,26 @@ def sidebar():
             st.markdown(f"""
             <div class='card' style="padding:16px;">
                 <div style="display:flex; align-items:center; gap:10px;">
-                    <div style="width:36px;height:36px;border-radius:50%;background:{ACCENT};
+                    <div style="width:36px;height:36px;border-radius:50%;background:{BRASS};
                     display:flex;align-items:center;justify-content:center;">👤</div>
                     <div>
                         <b>{st.session_state.user}</b><br>
-                        <span class='muted' style="font-size:12px;">Docs: {len(st.session_state.history)} &nbsp;•&nbsp; <span style="color:#22c55e;">Live</span></span>
+                        <span class='muted' style="font-size:12px;">Docs: {len(st.session_state.history)} &nbsp;•&nbsp; <span style="color:{SAGE};">Live</span></span>
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
-
-            st.markdown("""
-            <div style="text-align:center; margin-top:10px;" class='muted'>
-                LegalDoc AI • v2.0
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align:center;' class='muted'>LegalDoc AI • v2.1</div>", unsafe_allow_html=True)
 
 # =====================================================
-# TOP BAR (title + theme toggle + New Document)
+# TOP BAR (letterhead)
 # =====================================================
 def top_bar(title, subtitle, icon="📊"):
     left, right = st.columns([3, 2])
     with left:
         st.markdown(f"""
         <div>
-            <div style="font-size:28px; font-weight:800;">{icon} {title}</div>
+            <div style="font-size:28px; font-weight:700; font-family:'Newsreader',serif;">{icon} {title}</div>
             <div class='muted'>{subtitle}</div>
         </div>
         """, unsafe_allow_html=True)
@@ -334,8 +451,9 @@ def top_bar(title, subtitle, icon="📊"):
         with c1:
             mode_label = "🌙 Dark" if IS_DARK else "☀️ Light"
             other_label = "☀️ Light" if IS_DARK else "🌙 Dark"
-            if st.button(f"{mode_label}  |  switch to {other_label}", key="theme_toggle"):
+            if st.button(f"{mode_label}  →  {other_label}", key="theme_toggle"):
                 st.session_state.theme = "light" if IS_DARK else "dark"
+                toast(f"Switched to {other_label.split()[1]} mode", icon="🌗")
                 st.rerun()
         with c2:
             if st.button("➕ New Document", key="topbar_new_doc", use_container_width=True):
@@ -346,22 +464,21 @@ def top_bar(title, subtitle, icon="📊"):
                 st.session_state.q_index = 0
                 st.session_state.saved = False
                 st.rerun()
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<div class='letterhead-rule'></div>", unsafe_allow_html=True)
 
 # =====================================================
 # DASHBOARD
 # =====================================================
 def dashboard_ui():
-    top_bar("Dashboard", "AI-powered legal document workspace")
+    top_bar("Dashboard", "Your AI-powered legal drafting workspace")
 
-    # ================= KPI CARDS =================
     def kpi(title, value, icon, color):
         return f"""
-        <div class='card'>
+        <div class='card hoverable'>
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div>
                     <div class='muted'>{title}</div>
-                    <h1 style="margin:0; color:{color};">{value}</h1>
+                    <h1 style="margin:0; color:{color}; font-family:'Newsreader',serif;">{value}</h1>
                 </div>
                 <div class="kpi-icon" style="background:{color}22;">{icon}</div>
             </div>
@@ -370,23 +487,25 @@ def dashboard_ui():
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.markdown(kpi("Total Docs", len(st.session_state.history), "📄", "#3b82f6"), unsafe_allow_html=True)
+        st.markdown(kpi("Total Docs", len(st.session_state.history), "📄", BRASS), unsafe_allow_html=True)
     with c2:
-        st.markdown(kpi("Draft Mode", "RAG", "⚖️", "#22c55e"), unsafe_allow_html=True)
+        st.markdown(kpi("Draft Mode", "RAG", "⚖️", SAGE), unsafe_allow_html=True)
     with c3:
-        st.markdown(kpi("AI Engine", "LLM", "🤖", "#a855f7"), unsafe_allow_html=True)
+        st.markdown(kpi("AI Engine", "LLM", "🤖", "#8b6fd6"), unsafe_allow_html=True)
     with c4:
-        st.markdown(kpi("Status", "Live", "⚡", "#f59e0b"), unsafe_allow_html=True)
+        st.markdown(kpi("Status", "Live", "⚡", RUST), unsafe_allow_html=True)
 
     left, right = st.columns([2.5, 1.5])
 
     with left:
-        # ===== HERO BANNER =====
-        st.markdown("""
-        <div class="hero-banner" style="background-image:url('https://images.unsplash.com/photo-1521791136064-7986c2920216?q=80&w=1200&auto=format&fit=crop');">
+        st.markdown(f"""
+        <div class="hero-banner" style="background: linear-gradient(120deg, {INK_SOFT}, {INK});">
             <div class="hero-overlay">
-                <h2>Create Legal Document</h2>
-                <p>Generate Indian legal documents using AI + verified clauses.</p>
+                {seal("big")}
+                <div>
+                    <h2>Draft with confidence</h2>
+                    <p>Generate Indian legal documents using AI, grounded in verified clauses.</p>
+                </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -402,12 +521,11 @@ def dashboard_ui():
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # ===== DOCUMENT INSIGHTS =====
         doc_types = {}
         for item in st.session_state.history:
             doc_types[item["document"]] = doc_types.get(item["document"], 0) + 1
 
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.markdown("<div class='card hoverable'>", unsafe_allow_html=True)
         ic1, ic2 = st.columns([3, 1])
         with ic1:
             st.markdown("<h3 style='margin:0;'>📊 Document Insights</h3>", unsafe_allow_html=True)
@@ -415,13 +533,12 @@ def dashboard_ui():
             st.markdown("<div style='text-align:right;' class='toggle-pill'>RAG 🔵</div>", unsafe_allow_html=True)
 
         if doc_types:
-            st.bar_chart(doc_types)
+            st.bar_chart(doc_types, color=BRASS)
         else:
             st.info("No analytics yet. Create your first document 🚀")
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # ===== MY DOCUMENTS TASK BAR =====
-        st.markdown("<div class='card'><h3 style='margin-top:0;'>📝 My Documents</h3>", unsafe_allow_html=True)
+        st.markdown("<div class='card hoverable'><h3 style='margin-top:0;'>📝 My Documents</h3>", unsafe_allow_html=True)
         tc1, tc2 = st.columns([5, 1])
         with tc1:
             new_task = st.text_input("Add a document task...", key="doc_task_input", label_visibility="collapsed", placeholder="Add a document task...")
@@ -429,6 +546,7 @@ def dashboard_ui():
             if st.button("➕", key="add_doc_task", use_container_width=True):
                 if new_task:
                     st.session_state.doc_tasks.append(new_task)
+                    toast("Task added", icon="📝")
                     st.rerun()
         if st.session_state.doc_tasks:
             for t in st.session_state.doc_tasks[::-1]:
@@ -436,9 +554,7 @@ def dashboard_ui():
         st.markdown("</div>", unsafe_allow_html=True)
 
     with right:
-        # ===== RECENT ACTIVITY =====
-        st.markdown("<div class='card'><h3 style='margin-top:0;'>🕐 Recent Activity</h3>", unsafe_allow_html=True)
-
+        st.markdown("<div class='card hoverable'><h3 style='margin-top:0;'>🕐 Recent Activity</h3>", unsafe_allow_html=True)
         if not st.session_state.history:
             st.markdown("<div class='muted'>No activity yet</div>", unsafe_allow_html=True)
         else:
@@ -452,31 +568,35 @@ def dashboard_ui():
                         <div>{icon} <b>{item['document']}</b></div>
                         <span class='muted' style="font-size:12px;">{item['subtype']}</span>
                     </div>
-                    <div style="color:#f59e0b;">{star}</div>
+                    <div style="color:{BRASS};">{star}</div>
                 </div>
                 """, unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # ===== QUICK SETUP =====
-        st.markdown("<div class='card'><h3 style='margin-top:0;'>🔀 Quick Setup</h3>", unsafe_allow_html=True)
+        st.markdown("<div class='card hoverable'><h3 style='margin-top:0;'>🔀 Quick Setup</h3>", unsafe_allow_html=True)
         st.markdown("<div class='muted' style='font-size:13px;'>Document Type</div>", unsafe_allow_html=True)
-        st.session_state.quick_doc_type = st.selectbox(
-            "Document Type", ["Rent Agreement", "Affidavit", "Power of Attorney"],
-            index=["Rent Agreement", "Affidavit", "Power of Attorney"].index(st.session_state.quick_doc_type),
-            label_visibility="collapsed", key="quick_doc_select"
+        options = ["Rent Agreement", "Affidavit", "Power of Attorney"]
+        icons = {"Rent Agreement": "🏠", "Affidavit": "📗", "Power of Attorney": "🖋️"}
+        st.session_state.quick_doc_type = st.radio(
+            "Document Type", options,
+            index=options.index(st.session_state.quick_doc_type),
+            format_func=lambda o: f"{icons[o]} {o}",
+            label_visibility="collapsed", key="quick_doc_select", horizontal=True
         )
         st.markdown("<br>", unsafe_allow_html=True)
         qc1, qc2 = st.columns([3, 1])
         with qc1:
             st.markdown("<b>Auto-add clauses</b><br><span class='muted' style='font-size:12px;'>Verified legal formats</span>", unsafe_allow_html=True)
         with qc2:
-            st.session_state.auto_add_clauses = st.toggle(
+            new_val = st.toggle(
                 "Auto-add clauses", value=st.session_state.auto_add_clauses,
                 label_visibility="collapsed", key="auto_clause_toggle"
             )
+            if new_val != st.session_state.auto_add_clauses:
+                st.session_state.auto_add_clauses = new_val
+                toast("Clause auto-add " + ("enabled" if new_val else "disabled"), icon="⚖️")
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # ===== DISCLAIMER =====
         st.markdown("""
         <div class="disclaimer-box">
             ⚠️ <b>Disclaimer:</b> AI-generated documents must be reviewed by a legal professional.
@@ -486,75 +606,65 @@ def dashboard_ui():
 
 def landing_ui():
     st.markdown(
-        """
-        <div class="card" style="text-align:center; padding:50px 30px;">
-            <h1 style="font-size:42px;">⚖️ LegalDoc AI</h1>
-            <p class="muted" style="font-size:18px; margin-top:10px;">
+        f"""
+        <div class="card" style="text-align:center; padding:56px 30px;">
+            <div style="display:flex; justify-content:center; margin-bottom:18px;">{seal("big")}</div>
+            <h1 style="font-size:42px; margin-bottom:4px;">LegalDoc AI</h1>
+            <p class="muted" style="font-size:18px; margin-top:6px;">
                 AI-Powered Indian Legal Document Generator
             </p>
-            <p class="muted" style="max-width:700px; margin:20px auto;">
-                Create legally structured Indian documents using AI-guided workflows,
-                verified legal clauses, and secure authentication.
+            <p class="muted" style="max-width:680px; margin:20px auto;">
+                Create legally structured Indian documents through a guided, conversational
+                workflow — grounded in verified clauses, sealed and ready to download.
             </p>
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    st.markdown("<br>", unsafe_allow_html=True)
-
     c1, c2, c3 = st.columns([1, 1, 1])
     with c2:
-        if st.button("🚀 Get Started"):
+        if st.button("🚀 Get Started", use_container_width=True):
             st.session_state.page = "dashboard"
             st.rerun()
 
-    st.markdown("<br><br>", unsafe_allow_html=True)
-
+    st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("<div class='section-title'>Why LegalDoc AI?</div>", unsafe_allow_html=True)
 
-    f1, f2, f3, f4 = st.columns(4)
-    with f1:
-        st.markdown("""
-            <div class="card">
-                <h3>⚖️ Legal Accuracy</h3>
-                <p class="muted">Clause-based drafting using verified Indian legal formats.</p>
-            </div>
-            """, unsafe_allow_html=True)
-    with f2:
-        st.markdown("""
-            <div class="card">
-                <h3>🤖 AI Guided</h3>
-                <p class="muted">Chat-style questions to capture all legal requirements.</p>
-            </div>
-            """, unsafe_allow_html=True)
-    with f3:
-        st.markdown("""
-            <div class="card">
-                <h3>🔐 Secure Access</h3>
-                <p class="muted">Backend-based authentication with hashed passwords.</p>
-            </div>
-            """, unsafe_allow_html=True)
-    with f4:
-        st.markdown("""
-            <div class="card">
-                <h3>⚡ Fast & Optimized</h3>
-                <p class="muted">Single optimized AI call with RAG support.</p>
-            </div>
-            """, unsafe_allow_html=True)
+    features = [
+        ("⚖️", "Legal Accuracy", "Clause-based drafting using verified Indian legal formats."),
+        ("🤖", "AI Guided", "A chat-style dialogue captures every requirement, one question at a time."),
+        ("🔐", "Secure Access", "Backend-based authentication with hashed passwords."),
+        ("⚡", "Fast & Optimized", "A single optimized AI call, grounded with retrieval (RAG)."),
+    ]
+    cols = st.columns(4)
+    for col, (icon, title, desc) in zip(cols, features):
+        with col:
+            st.markdown(f"""
+                <div class="card hoverable">
+                    <h3>{icon} {title}</h3>
+                    <p class="muted">{desc}</p>
+                </div>
+                """, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("<div class='section-title'>How it works</div>", unsafe_allow_html=True)
-    st.markdown("""
-        <div class="card">
-            <ol class="muted">
-                <li>Select document type & variant</li>
-                <li>Answer AI-guided legal questions</li>
-                <li>Review and customize clauses</li>
-                <li>Download ready-to-use legal document</li>
-            </ol>
-        </div>
-        """, unsafe_allow_html=True)
+    steps = [
+        ("Select", "Choose the document type & variant"),
+        ("Converse", "Answer AI-guided legal questions in a chat"),
+        ("Review", "Check details and add special clauses"),
+        ("Seal", "Download your ready-to-use legal document"),
+    ]
+    step_cols = st.columns(4)
+    for i, (col, (label, desc)) in enumerate(zip(step_cols, steps)):
+        with col:
+            st.markdown(f"""
+            <div class="card hoverable" style="text-align:center;">
+                <div class="mono brass-text" style="font-size:22px; font-weight:700;">0{i+1}</div>
+                <div style="font-weight:700; margin:6px 0 4px 0; font-family:'Newsreader',serif;">{label}</div>
+                <div class="muted" style="font-size:13px;">{desc}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("""
@@ -566,21 +676,41 @@ def landing_ui():
 
 
 # =====================================================
+# DOCKET STEPPER
+# =====================================================
+def docket_stepper(current, labels):
+    html = "<div class='docket'>"
+    for i, label in enumerate(labels, start=1):
+        state = "done" if i < current else ("active" if i == current else "")
+        line_state = "done" if i < current else ""
+        html += f"""
+        <div class="docket-step">
+            <div class="docket-line {line_state}"></div>
+            <div class="docket-circle {state}">{i}</div>
+            <div class="docket-label">{label}</div>
+        </div>
+        """
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
+
+
+# =====================================================
 # DOCUMENT CREATION (STEPPER)
 # =====================================================
 def document_ui():
-    top_bar("Create Legal Document", "Follow the guided steps to draft your document", icon="📄")
+    top_bar("Create Legal Document", "A guided conversation drafts your document", icon="📄")
 
-    progress_map = {1: 0.25, 2: 0.50, 3: 0.75, 4: 1.0}
-    st.progress(progress_map.get(st.session_state.step, 0.25))
-    st.caption(f"Step {st.session_state.step} of 4")
+    docket_stepper(st.session_state.step, ["Select", "Converse", "Review", "Seal"])
 
     if st.session_state.step == 1:
-        st.markdown("<div class='card'><b>Step 1: Select Document</b></div>", unsafe_allow_html=True)
+        st.markdown("<div class='card'><b>Step 1 · Select Document</b></div>", unsafe_allow_html=True)
 
-        document = st.selectbox(
-            "Document Type",
-            ["Rent Agreement", "Affidavit", "Power of Attorney"]
+        doc_options = ["Rent Agreement", "Affidavit", "Power of Attorney"]
+        doc_icons = {"Rent Agreement": "🏠", "Affidavit": "📗", "Power of Attorney": "🖋️"}
+        document = st.radio(
+            "Document Type", doc_options,
+            format_func=lambda o: f"{doc_icons[o]}  {o}",
+            horizontal=True, key="step1_doc_type"
         )
 
         subtype_map = {
@@ -588,7 +718,11 @@ def document_ui():
             "Affidavit": ["Name Change", "Address Proof", "Income Proof"],
             "Power of Attorney": ["General POA", "Special POA"]
         }
-        subtype = st.selectbox("Document Variant", subtype_map[document])
+        st.markdown("<div class='muted' style='margin-top:14px;'>Document Variant</div>", unsafe_allow_html=True)
+        subtype = st.radio(
+            "Document Variant", subtype_map[document],
+            horizontal=True, key="step1_subtype", label_visibility="collapsed"
+        )
 
         if st.button("Next →"):
             st.session_state.document = document
@@ -598,62 +732,90 @@ def document_ui():
             st.rerun()
 
     elif st.session_state.step == 2:
-        st.markdown("<div class='card'><b>Step 2: AI is asking questions</b></div>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class='card' style="display:flex; align-items:center; gap:12px;">
+            {seal("small")}
+            <div>
+                <b>Step 2 · A quick conversation</b><br>
+                <span class='muted' style='font-size:13px;'>Answer each question — your document is built from these answers.</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
         if not st.session_state.questions:
-            q_prompt = f"""
+            with st.spinner("Preparing questions..."):
+                q_prompt = f"""
 Ask essential questions to draft a {st.session_state.subtype} {st.session_state.document}.
 Use simple language. Numbered list only.
 """
-            q_text = call_llm(q_prompt, temp=0.0, tokens=400)
-            st.session_state.questions = [
-                q.split(".", 1)[1].strip()
-                for q in q_text.split("\n") if "." in q
-            ]
+                q_text = call_llm(q_prompt, temp=0.0, tokens=400)
+                st.session_state.questions = [
+                    q.split(".", 1)[1].strip()
+                    for q in q_text.split("\n") if "." in q
+                ]
 
         q_index = st.session_state.q_index
         questions = st.session_state.questions
 
+        # Transcript of everything answered so far
+        for q, a in st.session_state.answers.items():
+            with st.chat_message("assistant", avatar="🤖"):
+                st.write(q)
+            with st.chat_message("user", avatar="🧑"):
+                st.write(a)
+
         if q_index < len(questions):
             current_question = questions[q_index]
-            st.markdown(
-                f"<div class='card'>🤖 <b>AI:</b><br>{current_question}</div>",
-                unsafe_allow_html=True
-            )
-            answer = st.text_input("Your answer")
+            with st.chat_message("assistant", avatar="🤖"):
+                st.write(current_question)
 
-            if st.button("Next Question"):
+            answer = st.chat_input("Type your answer and press Enter…")
+            if answer:
                 st.session_state.answers[current_question] = answer
                 st.session_state.q_index += 1
                 st.rerun()
         else:
             st.success("All questions completed ✅")
-            st.subheader("Additional Instructions (Optional)")
+            st.markdown("<div class='card'><b>Additional Instructions (Optional)</b></div>", unsafe_allow_html=True)
             st.session_state.extra = st.text_area(
                 "Add special clauses",
-                placeholder="Example: No subletting, parking included"
+                value=st.session_state.extra,
+                placeholder="Example: No subletting, parking included",
+                label_visibility="collapsed"
             )
             if st.button("Continue → Review"):
                 st.session_state.step = 3
                 st.rerun()
 
     elif st.session_state.step == 3:
-        st.markdown("<div class='card'><b>Step 3: Review Your Details</b></div>", unsafe_allow_html=True)
+        st.markdown("<div class='card'><b>Step 3 · Review Your Details</b></div>", unsafe_allow_html=True)
 
         for q, a in st.session_state.answers.items():
-            st.markdown(f"<div class='card'><b>{q}</b><br>{a}</div>", unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class='card hoverable' style="padding:16px 20px;">
+                <span class='muted' style='font-size:12px;'>QUESTION</span><br>
+                <b>{q}</b><br><br>
+                <span class='muted' style='font-size:12px;'>ANSWER</span><br>
+                {a}
+            </div>""", unsafe_allow_html=True)
 
         if st.session_state.extra:
-            st.markdown(f"<div class='card'><b>Extra</b><br>{st.session_state.extra}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='card hoverable'><span class='muted' style='font-size:12px;'>EXTRA CLAUSES</span><br>{st.session_state.extra}</div>", unsafe_allow_html=True)
 
-        if st.button("Generate Final Document"):
-            st.session_state.step = 4
-            st.rerun()
+        b1, b2 = st.columns([1, 1])
+        with b1:
+            if st.button("← Back", use_container_width=True):
+                st.session_state.step = 2
+                st.rerun()
+        with b2:
+            if st.button("Generate Final Document ⚖️", use_container_width=True):
+                st.session_state.step = 4
+                st.rerun()
 
     elif st.session_state.step == 4:
-        st.markdown("<div class='card'><b>Step 4: Final Document</b></div>", unsafe_allow_html=True)
+        st.markdown("<div class='card'><b>Step 4 · Final Document</b></div>", unsafe_allow_html=True)
 
-        with st.spinner("Drafting using legal knowledge base..."):
+        with st.spinner("Drafting using the legal knowledge base…"):
             qa = "\n".join(f"{k}: {v}" for k, v in st.session_state.answers.items())
             rag_ctx = retrieve_clauses(f"{st.session_state.document} {st.session_state.subtype}")
 
@@ -677,7 +839,8 @@ Rules:
 - Formal legal language
 - Output final document only
 """
-            st.session_state.final_doc = call_llm(prompt)
+            if not st.session_state.final_doc:
+                st.session_state.final_doc = call_llm(prompt)
 
         if not st.session_state.get("saved", False):
             st.session_state.history.append({
@@ -686,6 +849,13 @@ Rules:
                 "content": st.session_state.final_doc
             })
             st.session_state.saved = True
+            toast("Document saved to history", icon="📁")
+            st.markdown(f"""
+            <div class="stamp-wrap">
+                <div class="stamp">SEALED<span class="small">DRAFT COMPLETE</span></div>
+            </div>
+            """, unsafe_allow_html=True)
+            st.balloons()
 
         st.text_area("Final Document", st.session_state.final_doc, height=450)
         docx_path = create_docx(st.session_state.final_doc)
@@ -710,14 +880,16 @@ Rules:
 
 
 def history_ui():
-    top_bar("History", "All your generated documents", icon="📜")
+    top_bar("History", "Every document you've sealed", icon="📜")
 
     if not st.session_state.history:
         st.info("No documents generated yet.")
         return
 
+    icon_map = {"Rent Agreement": "📄", "Affidavit": "📗", "Power of Attorney": "🖋️"}
     for i, item in enumerate(st.session_state.history):
-        with st.expander(f"{i+1}. {item['document']} ({item['subtype']})"):
+        icon = icon_map.get(item["document"], "📄")
+        with st.expander(f"{icon}  {i+1}. {item['document']} ({item['subtype']})"):
             st.text_area("Document Content", item["content"], height=300, key=f"hist_{i}")
 
 # =====================================================
