@@ -679,19 +679,19 @@ def landing_ui():
 # DOCKET STEPPER
 # =====================================================
 def docket_stepper(current, labels):
-    html = "<div class='docket'>"
+    parts = ["<div class='docket'>"]
     for i, label in enumerate(labels, start=1):
         state = "done" if i < current else ("active" if i == current else "")
         line_state = "done" if i < current else ""
-        html += f"""
-        <div class="docket-step">
-            <div class="docket-line {line_state}"></div>
-            <div class="docket-circle {state}">{i}</div>
-            <div class="docket-label">{label}</div>
-        </div>
-        """
-    html += "</div>"
-    st.markdown(html, unsafe_allow_html=True)
+        parts.append(
+            f'<div class="docket-step"><div class="docket-line {line_state}"></div>'
+            f'<div class="docket-circle {state}">{i}</div>'
+            f'<div class="docket-label">{label}</div></div>'
+        )
+    parts.append("</div>")
+    # Joined with no leading whitespace on any line — Markdown treats
+    # 4+ leading spaces as a code block, which was swallowing steps 2-4.
+    st.markdown("".join(parts), unsafe_allow_html=True)
 
 
 # =====================================================
